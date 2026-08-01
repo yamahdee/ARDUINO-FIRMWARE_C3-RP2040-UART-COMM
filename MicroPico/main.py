@@ -1,20 +1,28 @@
-import machine
+from machine import UART, Pin
 import time
 
-# UART0 on Pico: GP0 is TX, GP1 is RX
-uart = machine.UART(0, baudrate=115200, tx=machine.Pin(0), rx=machine.Pin(1))
+uart = UART(
+    0,
+    baudrate=115200,
+    tx=Pin(0),
+    rx=Pin(1)
+)
 
-print("Pico MicroPython Script Started")
+def send(command, data=""):
+    uart.write(f"{command}|{data}\n")
 
 while True:
-    print("Sending data to ESP32...")
-    
-    uart.write("Ping from Pico!\n") 
-    
-    time.sleep(0.2) # Give the ESP32 time to process
-    
-    if uart.any():
-        reply = uart.readline().decode('utf-8').strip()
-        print("ESP32 Replied:", reply)
-        
+
+    send("LED")
+
+    time.sleep(1)
+
+    while uart.any():
+
+        response = uart.readline()
+
+        if response:
+
+            print(response.decode().strip())
+
     time.sleep(2)
