@@ -13,7 +13,11 @@ def send(command, data=""):
 
 while True:
 
-    send("LED")
+    send("LED", "ON")
+
+    time.sleep(1)
+
+    send ("LED", "OFF")
 
     time.sleep(1)
 

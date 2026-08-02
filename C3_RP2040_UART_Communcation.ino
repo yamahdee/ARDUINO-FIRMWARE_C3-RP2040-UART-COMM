@@ -60,7 +60,16 @@ void loop()
     {
         Serial.println("LED command received");
         Serial0.println("OK|");
-        digitalWrite(8, HIGH);
+
+        if(data == "ON"){
+        digitalWrite(8, HIGH);}
+
+        else if(data == "OFF"){
+            digitalWrite(8, LOW);
+        }
+        else{
+            Serial0.println("ERROR|");
+        }
     }
     else
     {
