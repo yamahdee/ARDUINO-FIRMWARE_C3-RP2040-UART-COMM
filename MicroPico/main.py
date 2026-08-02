@@ -8,18 +8,16 @@ uart = UART(
     rx=Pin(1)
 )
 
-def send(command, data=""):
-    uart.write(f"{command}|{data}\n")
 
 while True:
+    cmd = input("ESP> ")
 
-    send("LED", "ON")
+    uart.write(cmd + "\n")
 
-    time.sleep(1)
+    while not uart.any():
+        pass
 
-    send ("LED", "OFF")
-
-    time.sleep(1)
+    print(uart.readline().decode().strip())
 
     while uart.any():
 
