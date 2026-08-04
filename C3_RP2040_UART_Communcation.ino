@@ -1,13 +1,27 @@
+#include <ArduinoJson.h>
+#include <ArduinoJson.hpp>
+
 #include <WiFi.h>
 
 #define RX_PIN 20
 #define TX_PIN 21
 
-const char* WIFI_SSID = "USER 6419";
-const char* WIFI_PASSWORD = "123456798";
+const char* DEFAULT_WIFI_SSID  = "USER 6419";
+const char* DEFAULT_WIFI_PASSWORD  = "123456798";
 
-const char* ap_ssid = "ESP C3";
-const char* ap_password = "123456789";
+const char* DEFAULT_AP_SSID  = "ESP C3";
+const char* DEFAULT_AP_PASSWORD  = "123456789";
+
+// JSON Helper
+void sendJsonResponse(String status, String msg){
+    JsonDocument responseDoc;
+    responseDoc["status"] = status;
+    if (msg != ""){
+        responseDoc["msg"] =msg;
+    }
+    serializeJson(responseDoc, Serial0);
+    Serial0.println();
+}
 
 // Reusable internal connection helper (doesn't force a WiFi mode change)
 bool waitForConnection() {
@@ -58,16 +72,16 @@ bool disconnectAP() {
     return success;
 }
 
-// Reusing functions properly here
-bool connectAP_STA(const char* a_ssid, const char* a_password, const char* w_ssid, const char* w_password) {
+
+bool connectAP_STA(const char* a_ssid, const char* a_password, const char* ssid, const char* password) {
     WiFi.mode(WIFI_AP_STA); // Explicitly dual mode
 
     if (!WiFi.softAP(a_ssid, a_password)) {
         return false;
     }
 
-    WiFi.begin(w_ssid, w_password);
-    return waitForConnection(); // Reusing the exact same connection loop logic safely!
+    WiFi.begin(ssid, password);
+    return waitForConnection(); 
 }
 
 bool disconnectAP_STA() {
@@ -106,74 +120,88 @@ void loop() {
     String packet = Serial0.readStringUntil('\n');
     packet.trim();
 
-    int separator = packet.indexOf('|');
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, packet);
 
-    String command;
-    String data;
-
-    if (separator >= 0) {
-        command = packet.substring(0, separator);
-        data = packet.substring(separator + 1);
-    } else {
-        command = packet;
-        data = "";
+    if (error){
+        sendJsonResponse("ERROR", "INVALID_JSON");
+        return;
     }
 
-    Serial.print("Command: "); Serial.println(command);
-    Serial.print("Data: ");    Serial.println(data);
+    String command = doc["cmd"] | "";
+    String action = doc["action"] | "";
+    String ssid = doc["ssid"] | "";
+    String pass = doc["pass"] | "";
+    String ap_ssid = doc["ap_ssid"] | "";
+    String ap_pass = doc["ap_pass"] | "";
+
+    Serial.print("JSON CMD: "); Serial.println(command);
 
     if (command == "PING") {
-        Serial0.println("PONG|");
+        sendJsonResponse("OK", "PONG");
     }
     else if (command == "STATUS") {
-        Serial0.println("READY|");
+        sendJsonResponse("OK", "READY");
     }
     // LED COMMAND
     else if (command == "LED") {
         Serial.println("LED command received");
         
-        if (data == "ON") {
+        if (action == "ON") {
             digitalWrite(8, HIGH);
-            Serial0.println("OK|");
+            sendJsonResponse("OK", "LED_ON");
         }
-        else if (data == "OFF") {
+        else if (action == "OFF") {
             digitalWrite(8, LOW);
-            Serial0.println("OK|");
+            sendJsonResponse("OK", "LED_OFF");
         }
         else {
-            Serial0.println("ERROR|INVALID_DATA");
+            sendJsonResponse("ERROR", "INVALID_ACTION");
         }
     }
     // WIFI COMMANDS
         else if (command == "WIFI") {
-        if (data == "CONNECT") {
-            if (connectWiFi(WIFI_SSID, WIFI_PASSWORD)) {
-                Serial0.println("OK|CONNECTED_STA");
+        if (action == "CONNECT") {
+             const char* final_ssid = ssid.length() > 0 ? ssid.c_str() : DEFAULT_WIFI_SSID;
+             const char* final_pass = pass.length() > 0 ? pass.c_str() : DEFAULT_WIFI_PASSWORD;
+             
+            if (connectWiFi(final_ssid, final_pass)) {
+                sendJsonResponse("OK", "CONNECTED_STA");
             } else {
-                Serial0.println("ERROR|NO_WIFI");
+                sendJsonResponse("ERROR", "NO_WIFI");
             }
         }
-        else if (data == "START_AP") {
-            if (connectAP(ap_ssid, ap_password)) {
-                Serial0.println("OK|AP_ACTIVE");
+        else if (action == "START_AP") {
+
+            const char* final_ssid = ssid.length() > 0 ? ssid.c_str() : DEFAULT_AP_SSID;
+            const char* final_pass = pass.length() > 0 ? pass.c_str() : DEFAULT_AP_PASSWORD;
+
+            if (connectAP(final_ssid, final_pass)) {
+                sendJsonResponse("OK", "AP_ACTIVE");
             } else {
-                Serial0.println("ERROR|AP_FAILED");
+                sendJsonResponse("ERROR", "AP_FAILED");
             }
         }
-        else if (data == "START_AP_STA") {
-            if (connectAP_STA(ap_ssid, ap_password, WIFI_SSID, WIFI_PASSWORD)) {
-                Serial0.println("OK|AP_STA_ACTIVE");
+        else if (action == "START_AP_STA") {
+            const char* final_ap_ssid = ap_ssid.length() > 0 ? ap_ssid.c_str() : DEFAULT_AP_SSID;
+            const char* final_ap_pass = ap_pass.length() > 0 ? ap_pass.c_str() : DEFAULT_AP_PASSWORD;
+            const char* final_ssid = ssid.length() > 0 ? ssid.c_str() : DEFAULT_WIFI_SSID;
+            const char* final_pass = pass.length() > 0 ? pass.c_str() : DEFAULT_WIFI_PASSWORD;
+            
+
+            if (connectAP_STA(final_ap_ssid, final_ap_pass, final_ssid, final_pass)) {
+                sendJsonResponse("OK", "AP_STA_ACTIVE");
             } else {
-                Serial0.println("ERROR|AP_STA_FAILED");
+                sendJsonResponse("ERROR", "AP_STA_FAILED");
             }
         }
-        else if (data == "DISCONNECT") {
+        else if (action == "DISCONNECT") {
             // Smart disconnect: shuts down whatever is running cleanly
             disconnectWiFi();
             disconnectAP();
-            Serial0.println("OK|DISCONNECTED");
+            sendJsonResponse("OK", "DISCONNECTED");
         }
-        else if (data == "STATUS") {
+        else if (action == "STATUS") {
             // Enhanced status reporting back across the UART link
             String currentMode = "";
             switch(WiFi.getMode()) {
@@ -182,24 +210,20 @@ void loop() {
                 case WIFI_AP:  currentMode = "AP"; break;
                 case WIFI_AP_STA: currentMode = "AP_STA"; break;
             }
-            
-            if (WiFi.status() == WL_CONNECTED) {
-                Serial0.println("OK|MODE:" + currentMode + "|STATUS:CONNECTED");
-            } else {
-                Serial0.println("OK|MODE:" + currentMode + "|STATUS:DISCONNECTED");
-            }
+            String connectionState = (WiFi.status() == WL_CONNECTED)? "CONNECTED" : "DISCONNECTED";
+            sendJsonResponse("OK", "MODE:" + currentMode + "|STATUS:" + connectionState);
         }
-        else if (data == "OFF") {
+        else if (action == "OFF") {
             if (offWiFi()) {
-                Serial0.println("OK|WIFI_OFF");
+                sendJsonResponse("OK", "WIFI_OFF");
             }
         }
         else {
-            Serial0.println("ERROR|UNKNOWN_WIFI_SUBCOMMAND");
+            sendJsonResponse("ERROR","UNKNOWN_WIFI_SUBCOMMAND");
         }
     }
 
     else {
-        Serial0.println("ERROR|UNKNOWN_COMMAND");
+        sendJsonResponse("ERROR", "UNKNOWN_COMMAND");
     }
 }
